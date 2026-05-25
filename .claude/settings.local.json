@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mysql -u root -p123456 -e \"CREATE DATABASE IF NOT EXISTS jycutpaper CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;\")",
+      "Bash(pkill -f \"swift run\")",
+      "Bash(pkill -f \"swift-package resolve\")",
+      "Bash(swift build *)",
+      "Bash(mysql -u root -p123456 jycutpaper -e 'INSERT INTO users \\(id, username, nickname, password_hash, level, created_at\\) VALUES \\(UUID\\(\\), '\\\\''admin'\\\\'', '\\\\''管理员'\\\\'', '\\\\''$2a$10$LxF0Yf3TuRAvdA9WUGNShOr4HlWFI9dDUqZ6DMXvWbLOov0eJuHky'\\\\'', 99, NOW\\(\\)\\);')",
+      "Bash(pkill -f \"swift\")",
+      "Bash(MYSQL_PASSWORD=123456 MYSQL_USER=root swift run)",
+      "Bash(curl -s http://localhost:8080/health)"
+    ],
+    "additionalDirectories": [
+      "/Users/ttydf/Documents/Xcode_Project/JYCutPaper_Backend/Sources/App",
+      "/Users/ttydf/Documents/Xcode_Project/JYCutPaper_Backend"
+    ]
+  }
+}
