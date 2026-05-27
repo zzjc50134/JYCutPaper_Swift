@@ -28,6 +28,20 @@ struct CreateView: View {
                 SettingsView()
             }
         }
+        .fileImporter(
+            isPresented: $viewModel.showFilePicker,
+            allowedContentTypes: [.data],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                if let url = urls.first {
+                    viewModel.importModel(from: url)
+                }
+            case .failure(let error):
+                viewModel.errorMessage = "选择文件失败: \(error.localizedDescription)"
+            }
+        }
     }
 
     private var headerSection: some View {
@@ -223,6 +237,97 @@ struct CreateView: View {
             .padding(.horizontal, 24)
 
             VStack(alignment: .leading, spacing: 12) {
+                Text("模型来源")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white)
+
+                HStack(spacing: 12) {
+                    ForEach(ImageModelSource.allCases, id: \.self) { source in
+                        ModelSourceButton(
+                            source: source,
+                            isSelected: viewModel.modelSource == source,
+                            action: {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                    viewModel.modelSource = source
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+            .padding(.horizontal, 24)
+
+            if viewModel.modelSource == .local {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("选择模型")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.white)
+                        Spacer()
+                        Button {
+                            viewModel.showFilePicker = true
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "plus.circle.fill")
+                                Text("导入")
+                            }
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(JYColor.gold)
+                        }
+                        Button {
+                            viewModel.refreshLocalModels()
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                                .foregroundColor(JYColor.gold)
+                        }
+                    }
+
+                    if viewModel.localModels.isEmpty && !viewModel.isImporting {
+                        HStack {
+                            Spacer()
+                            VStack(spacing: 12) {
+                                Image(systemName: "cube.box")
+                                    .font(.system(size: 32))
+                                    .foregroundColor(JYColor.moonWhite.opacity(0.4))
+                                Text("暂无可用模型")
+                                    .font(.system(size: 15))
+                                    .foregroundColor(JYColor.moonWhite.opacity(0.6))
+                                Button {
+                                    viewModel.showFilePicker = true
+                                } label: {
+                                    Text("从文件导入 .mlmodel")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 20)
+                                        .padding(.vertical, 10)
+                                        .background(JYColor.primaryRed)
+                                        .cornerRadius(20)
+                                }
+                            }
+                            .padding(.vertical, 24)
+                            Spacer()
+                        }
+                    } else {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 12) {
+                                ForEach(viewModel.localModels, id: \.self) { model in
+                                    LocalModelTag(
+                                        name: model,
+                                        isSelected: viewModel.selectedLocalModel == model,
+                                        action: {
+                                            viewModel.selectedLocalModel = model
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 24)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
                 Text("风格选择")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(.white)
@@ -360,21 +465,118 @@ enum CreateMode: CaseIterable {
     }
 }
 
+// MARK: - 模型来源
+enum ImageModelSource: String, CaseIterable {
+    case miniMax = "minimax"
+    case local = "local"
+
+    var title: String {
+        switch self {
+        case .miniMax: return "MiniMax API"
+        case .local: return "本地模型"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .miniMax: return "cloud.fill"
+        case .local: return "laptopcomputer"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .miniMax: return "使用云端 AI 服务"
+        case .local: return "使用本地 LoRA 模型"
+        }
+    }
+}
+
 // MARK: - ViewModel
 class CreateViewModel: ObservableObject {
     @Published var selectedMode: CreateMode = .textToImage
     @Published var prompt: String = ""
     @Published var selectedStyle: ImageStyle = .traditional
     @Published var selectedRatio: AspectRatio = .ratio1x1
+    @Published var modelSource: ImageModelSource = .miniMax
+    @Published var localModels: [String] = []
+    @Published var selectedLocalModel: String = ""
     @Published var isGenerating: Bool = false
     @Published var generatedImage: UIImage?
     @Published var errorMessage: String?
     @Published var optimizingPrompt: Bool = false
+    @Published var showFilePicker: Bool = false
+    @Published var isImporting: Bool = false
 
     init() {
         selectedStyle = SettingsManager.shared.getDefaultStyle()
         selectedMode = SettingsManager.shared.getDefaultMode()
         selectedRatio = SettingsManager.shared.getDefaultRatio()
+        refreshLocalModels()
+    }
+
+    func refreshLocalModels() {
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let modelsPath = documentsPath.appendingPathComponent("Models")
+
+        guard FileManager.default.fileExists(atPath: modelsPath.path) else {
+            localModels = []
+            return
+        }
+
+        do {
+            let files = try FileManager.default.contentsOfDirectory(at: modelsPath, includingPropertiesForKeys: nil)
+            localModels = files
+                .filter { ["mlmodel", "safetensors", "ckpt"].contains($0.pathExtension.lowercased()) }
+                .map { $0.deletingPathExtension().lastPathComponent }
+
+            if selectedLocalModel.isEmpty && !localModels.isEmpty {
+                selectedLocalModel = localModels[0]
+            }
+        } catch {
+            localModels = []
+        }
+    }
+
+    func importModel(from url: URL) {
+        isImporting = true
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let modelsPath = documentsPath.appendingPathComponent("Models")
+
+        let fileName = url.lastPathComponent
+        guard fileName.hasSuffix(".mlmodel") || fileName.hasSuffix(".safetensors") || fileName.hasSuffix(".ckpt") else {
+            errorMessage = "仅支持 .mlmodel, .safetensors, .ckpt 文件"
+            isImporting = false
+            return
+        }
+
+        do {
+            if !FileManager.default.fileExists(atPath: modelsPath.path) {
+                try FileManager.default.createDirectory(at: modelsPath, withIntermediateDirectories: true)
+            }
+
+            let destinationURL = modelsPath.appendingPathComponent(fileName)
+
+            if FileManager.default.fileExists(atPath: destinationURL.path) {
+                try FileManager.default.removeItem(at: destinationURL)
+            }
+
+            if url.startAccessingSecurityScopedResource() {
+                defer { url.stopAccessingSecurityScopedResource() }
+                try FileManager.default.copyItem(at: url, to: destinationURL)
+            } else {
+                try FileManager.default.copyItem(at: url, to: destinationURL)
+            }
+
+            refreshLocalModels()
+
+            let modelName = destinationURL.deletingPathExtension().lastPathComponent
+            selectedLocalModel = modelName
+        } catch {
+            errorMessage = "导入失败: \(error.localizedDescription)"
+        }
+
+        isImporting = false
     }
 
     func generate() async {
@@ -519,6 +721,84 @@ struct QuickPromptTag: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 20)
                     .stroke(JYColor.moonWhite.opacity(0.2), lineWidth: 1)
+            )
+        }
+    }
+}
+
+struct LocalModelTag: View {
+    let name: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: "cpu")
+                    .font(.system(size: 12))
+                Text(name)
+                    .font(.system(size: 13, weight: .medium))
+                    .lineLimit(1)
+            }
+            .foregroundColor(isSelected ? .white : JYColor.moonWhite.opacity(0.8))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(isSelected ? JYColor.primaryRed : Color(hex: "2C2C2E"))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(isSelected ? JYColor.gold : JYColor.moonWhite.opacity(0.2), lineWidth: 1)
+            )
+        }
+    }
+}
+
+struct ModelSourceButton: View {
+    let source: ImageModelSource
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(isSelected ? JYColor.gold.opacity(0.2) : Color(hex: "1C1C1E"))
+                        .frame(width: 44, height: 44)
+
+                    Image(systemName: source.icon)
+                        .font(.system(size: 20))
+                        .foregroundColor(isSelected ? JYColor.gold : JYColor.moonWhite.opacity(0.6))
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(source.title)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(.white)
+
+                    Text(source.description)
+                        .font(.system(size: 11))
+                        .foregroundColor(JYColor.moonWhite.opacity(0.5))
+                }
+
+                Spacer()
+
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundColor(JYColor.gold)
+                }
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(isSelected ? JYColor.primaryRed.opacity(0.15) : Color(hex: "2C2C2E"))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(isSelected ? JYColor.gold.opacity(0.5) : Color.clear, lineWidth: 1)
             )
         }
     }
