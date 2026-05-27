@@ -13,9 +13,13 @@ struct CreateView: View {
                 modeSelector
 
                 ScrollView {
-                    VStack(spacing: 32) {
+                    VStack(spacing: 24) {
                         resultSection
                         inputSection
+                        modelSourceSection
+                        styleSection
+                        ratioSection
+                        generateButtonSection
                         quickPromptsSection
                     }
                     .padding(.vertical, 24)
@@ -42,6 +46,9 @@ struct CreateView: View {
                 viewModel.errorMessage = "选择文件失败: \(error.localizedDescription)"
             }
         }
+        .sheet(isPresented: $viewModel.showImagePicker) {
+            ImagePicker(image: $viewModel.sourceImage)
+        }
     }
 
     private var headerSection: some View {
@@ -61,10 +68,7 @@ struct CreateView: View {
                     .font(.system(size: 20))
                     .foregroundColor(JYColor.gold)
                     .frame(width: 44, height: 44)
-                    .background(
-                        Circle()
-                            .fill(Color(hex: "2C2C2E"))
-                    )
+                    .background(Circle().fill(Color(hex: "2C2C2E")))
             }
         }
         .padding(.horizontal, 24)
@@ -72,11 +76,10 @@ struct CreateView: View {
         .background(Color(hex: "2C2C2E"))
     }
 
-    // MARK: - 模式选择器
     private var modeSelector: some View {
         VStack(spacing: 16) {
             HStack(spacing: 12) {
-                ForEach(Array(CreateMode.allCases.enumerated()), id: \.offset) { index, mode in
+                ForEach(Array(CreateMode.allCases.enumerated()), id: \.offset) { _, mode in
                     ModeButton(
                         title: mode.title,
                         icon: mode.icon,
@@ -95,24 +98,14 @@ struct CreateView: View {
         .background(Color(hex: "2C2C2E"))
     }
 
-    // MARK: - 结果展示区
     @ViewBuilder
     private var resultSection: some View {
         VStack(spacing: 20) {
             if let generatedImage = viewModel.generatedImage {
                 ZStack {
                     RoundedRectangle(cornerRadius: 24)
-                        .fill(
-                            LinearGradient(
-                                colors: [JYColor.primaryRed, JYColor.deepRed],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .overlay(
-                            CloudPattern()
-                                .opacity(0.1)
-                        )
+                        .fill(LinearGradient(colors: [JYColor.primaryRed, JYColor.deepRed], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .overlay(CloudPattern().opacity(0.1))
 
                     Image(uiImage: generatedImage)
                         .resizable()
@@ -173,100 +166,248 @@ struct CreateView: View {
         }
     }
 
-    // MARK: - 输入区
+    @ViewBuilder
     private var inputSection: some View {
-        VStack(spacing: 20) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("创作描述")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.white)
+        switch viewModel.selectedMode {
+        case .textToImage:
+            textToImageInput
+        case .imageToImage:
+            imageToImageInput
+        case .elementCompose:
+            elementComposeInput
+        }
+    }
 
-                ZStack(alignment: .topLeading) {
-                    if viewModel.prompt.isEmpty {
-                        Text("输入你想创作的剪纸描述，如：福字、牡丹花纹...")
-                            .font(.system(size: 16))
-                            .foregroundColor(.gray)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 20)
-                    }
+    private var textToImageInput: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("创作描述")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(.white)
 
-                    TextEditor(text: $viewModel.prompt)
-                        .modifier(TextEditorBackgroundModifier())
-                        .background(Color.clear)
-                        .foregroundColor(.white)
+            ZStack(alignment: .topLeading) {
+                if viewModel.prompt.isEmpty {
+                    Text("输入你想创作的剪纸描述，如：福字、牡丹花纹...")
                         .font(.system(size: 16))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 16)
+                        .foregroundColor(.gray)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 20)
                 }
-                .frame(height: 120)
-                .background(Color(hex: "2C2C2E"))
-                .cornerRadius(16)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(JYColor.moonWhite.opacity(0.2), lineWidth: 1)
-                )
 
-                Button {
-                    Task {
-                        await viewModel.optimize()
-                    }
-                } label: {
-                    HStack(spacing: 8) {
-                        if viewModel.optimizingPrompt {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: JYColor.gold))
-                                .scaleEffect(0.8)
-                            Text("AI优化中...")
-                                .font(.system(size: 14))
-                                .foregroundColor(JYColor.moonWhite)
-                        } else {
-                            Image(systemName: "wand.and.stars")
-                                .foregroundColor(JYColor.gold)
-                            Text("AI优化")
-                                .font(.system(size: 14))
-                                .foregroundColor(.white)
-                        }
-                    }
-                }
-                .disabled(viewModel.optimizingPrompt || viewModel.prompt.isEmpty)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(Color(hex: "2C2C2E"))
-                .cornerRadius(12)
-            }
-            .padding(.horizontal, 24)
-
-            VStack(alignment: .leading, spacing: 12) {
-                Text("模型来源")
-                    .font(.system(size: 16, weight: .semibold))
+                TextEditor(text: $viewModel.prompt)
+                    .modifier(TextEditorBackgroundModifier())
+                    .background(Color.clear)
                     .foregroundColor(.white)
+                    .font(.system(size: 16))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 16)
+            }
+            .frame(height: 120)
+            .background(Color(hex: "2C2C2E"))
+            .cornerRadius(16)
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(JYColor.moonWhite.opacity(0.2), lineWidth: 1))
 
-                HStack(spacing: 12) {
-                    ForEach(ImageModelSource.allCases, id: \.self) { source in
-                        ModelSourceButton(
-                            source: source,
-                            isSelected: viewModel.modelSource == source,
-                            action: {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                    viewModel.modelSource = source
-                                }
-                            }
-                        )
+            Button {
+                Task { await viewModel.optimize() }
+            } label: {
+                HStack(spacing: 8) {
+                    if viewModel.optimizingPrompt {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: JYColor.gold))
+                            .scaleEffect(0.8)
+                        Text("AI优化中...")
+                            .font(.system(size: 14))
+                            .foregroundColor(JYColor.moonWhite)
+                    } else {
+                        Image(systemName: "wand.and.stars")
+                            .foregroundColor(JYColor.gold)
+                        Text("AI优化")
+                            .font(.system(size: 14))
+                            .foregroundColor(.white)
                     }
                 }
             }
-            .padding(.horizontal, 24)
+            .disabled(viewModel.optimizingPrompt || viewModel.prompt.isEmpty)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Color(hex: "2C2C2E"))
+            .cornerRadius(12)
+        }
+        .padding(.horizontal, 24)
+    }
+
+    private var imageToImageInput: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("上传图片")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(.white)
+
+            Button { viewModel.showImagePicker = true } label: {
+                if let image = viewModel.sourceImage {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxHeight: 200)
+                        .cornerRadius(16)
+                } else {
+                    VStack(spacing: 16) {
+                        Image(systemName: "photo.badge.plus")
+                            .font(.system(size: 48))
+                            .foregroundColor(JYColor.moonWhite.opacity(0.5))
+                        Text("点击选择图片")
+                            .font(.system(size: 16))
+                            .foregroundColor(JYColor.moonWhite.opacity(0.7))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 160)
+                    .background(Color(hex: "2C2C2E"))
+                    .cornerRadius(16)
+                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(JYColor.moonWhite.opacity(0.2), style: StrokeStyle(lineWidth: 1, dash: [8])))
+                }
+            }
+
+            if viewModel.sourceImage != nil {
+                Button { viewModel.sourceImage = nil } label: {
+                    Text("清除图片")
+                        .font(.system(size: 14))
+                        .foregroundColor(.red)
+                }
+            }
+
+            Text("参考描述（可选）")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(.white)
+                .padding(.top, 8)
+
+            ZStack(alignment: .topLeading) {
+                if viewModel.prompt.isEmpty {
+                    Text("描述你想要的变化，如：转换为剪纸风格...")
+                        .font(.system(size: 16))
+                        .foregroundColor(.gray)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 20)
+                }
+
+                TextEditor(text: $viewModel.prompt)
+                    .modifier(TextEditorBackgroundModifier())
+                    .background(Color.clear)
+                    .foregroundColor(.white)
+                    .font(.system(size: 16))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 16)
+            }
+            .frame(height: 100)
+            .background(Color(hex: "2C2C2E"))
+            .cornerRadius(16)
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(JYColor.moonWhite.opacity(0.2), lineWidth: 1))
+        }
+        .padding(.horizontal, 24)
+    }
+
+    private var elementComposeInput: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("选择元素")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(.white)
+
+            Text("选择你想要组合的剪纸元素")
+                .font(.system(size: 13))
+                .foregroundColor(JYColor.moonWhite.opacity(0.6))
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 80))], spacing: 12) {
+                ForEach(CompositionElement.allElements, id: \.self) { element in
+                    CompositionElementButton(
+                        element: element,
+                        isSelected: viewModel.selectedElements.contains(element),
+                        action: {
+                            if viewModel.selectedElements.contains(element) {
+                                viewModel.selectedElements.remove(element)
+                            } else {
+                                viewModel.selectedElements.insert(element)
+                            }
+                        }
+                    )
+                }
+            }
+
+            Text("补充描述（可选）")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(.white)
+                .padding(.top, 8)
+
+            ZStack(alignment: .topLeading) {
+                if viewModel.prompt.isEmpty {
+                    Text("添加更多细节描述...")
+                        .font(.system(size: 16))
+                        .foregroundColor(.gray)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 20)
+                }
+
+                TextEditor(text: $viewModel.prompt)
+                    .modifier(TextEditorBackgroundModifier())
+                    .background(Color.clear)
+                    .foregroundColor(.white)
+                    .font(.system(size: 16))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 16)
+            }
+            .frame(height: 80)
+            .background(Color(hex: "2C2C2E"))
+            .cornerRadius(16)
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(JYColor.moonWhite.opacity(0.2), lineWidth: 1))
+        }
+        .padding(.horizontal, 24)
+    }
+
+    private var modelSourceSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("模型来源")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(.white)
+
+            HStack(spacing: 12) {
+                ForEach(ImageModelSource.allCases, id: \.self) { source in
+                    ModelSourceButton(
+                        source: source,
+                        isSelected: viewModel.modelSource == source,
+                        action: {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                viewModel.modelSource = source
+                            }
+                        }
+                    )
+                }
+            }
 
             if viewModel.modelSource == .local {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text("选择模型")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.white)
-                        Spacer()
+                if viewModel.localModels.isEmpty {
+                    VStack(spacing: 12) {
+                        Image(systemName: "cube.box")
+                            .font(.system(size: 32))
+                            .foregroundColor(JYColor.moonWhite.opacity(0.4))
+                        Text("暂无可用模型")
+                            .font(.system(size: 15))
+                            .foregroundColor(JYColor.moonWhite.opacity(0.6))
                         Button {
                             viewModel.showFilePicker = true
                         } label: {
+                            Text("从文件导入 .mlmodel")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 10)
+                                .background(JYColor.primaryRed)
+                                .cornerRadius(20)
+                        }
+                    }
+                    .padding(.vertical, 16)
+                } else {
+                    HStack {
+                        Text("选择模型")
+                            .font(.system(size: 14))
+                            .foregroundColor(JYColor.moonWhite.opacity(0.7))
+                        Spacer()
+                        Button { viewModel.showFilePicker = true } label: {
                             HStack(spacing: 4) {
                                 Image(systemName: "plus.circle.fill")
                                 Text("导入")
@@ -274,169 +415,127 @@ struct CreateView: View {
                             .font(.system(size: 14, weight: .medium))
                             .foregroundColor(JYColor.gold)
                         }
-                        Button {
-                            viewModel.refreshLocalModels()
-                        } label: {
-                            Image(systemName: "arrow.clockwise")
-                                .foregroundColor(JYColor.gold)
-                        }
                     }
 
-                    if viewModel.localModels.isEmpty && !viewModel.isImporting {
-                        HStack {
-                            Spacer()
-                            VStack(spacing: 12) {
-                                Image(systemName: "cube.box")
-                                    .font(.system(size: 32))
-                                    .foregroundColor(JYColor.moonWhite.opacity(0.4))
-                                Text("暂无可用模型")
-                                    .font(.system(size: 15))
-                                    .foregroundColor(JYColor.moonWhite.opacity(0.6))
-                                Button {
-                                    viewModel.showFilePicker = true
-                                } label: {
-                                    Text("从文件导入 .mlmodel")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 20)
-                                        .padding(.vertical, 10)
-                                        .background(JYColor.primaryRed)
-                                        .cornerRadius(20)
-                                }
-                            }
-                            .padding(.vertical, 24)
-                            Spacer()
-                        }
-                    } else {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 12) {
-                                ForEach(viewModel.localModels, id: \.self) { model in
-                                    LocalModelTag(
-                                        name: model,
-                                        isSelected: viewModel.selectedLocalModel == model,
-                                        action: {
-                                            viewModel.selectedLocalModel = model
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal, 24)
-                .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-
-            VStack(alignment: .leading, spacing: 12) {
-                Text("风格选择")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.white)
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        ForEach(ImageStyle.allCases, id: \.self) { style in
-                            StyleTag(
-                                title: style.displayName,
-                                isSelected: viewModel.selectedStyle == style,
-                                action: {
-                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                        viewModel.selectedStyle = style
-                                    }
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-            .padding(.horizontal, 24)
-
-            VStack(alignment: .leading, spacing: 12) {
-                Text("图片尺寸")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.white)
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        ForEach(AspectRatio.allCases, id: \.self) { ratio in
-                            Button {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                    viewModel.selectedRatio = ratio
-                                }
-                            } label: {
-                                VStack(spacing: 6) {
-                                    AspectRatioPreview(ratio: ratio, isSelected: viewModel.selectedRatio == ratio)
-                                    Text(ratio.displayName)
-                                        .font(.system(size: 11))
-                                        .foregroundColor(viewModel.selectedRatio == ratio ? .white : JYColor.moonWhite.opacity(0.6))
-                                }
-                                .frame(width: 56, height: 64)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(viewModel.selectedRatio == ratio ? JYColor.primaryRed.opacity(0.3) : Color(hex: "2C2C2E"))
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(viewModel.selectedRatio == ratio ? JYColor.gold : Color.clear, lineWidth: 1)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            ForEach(viewModel.localModels, id: \.self) { model in
+                                LocalModelTag(
+                                    name: model,
+                                    isSelected: viewModel.selectedLocalModel == model,
+                                    action: { viewModel.selectedLocalModel = model }
                                 )
                             }
                         }
                     }
                 }
             }
-            .padding(.horizontal, 24)
-
-            Button {
-                Task {
-                    await viewModel.generate()
-                }
-            } label: {
-                HStack {
-                    if viewModel.isGenerating {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                    } else {
-                        Image(systemName: "wand.and.stars")
-                            .font(.system(size: 18))
-                        Text("开始生成")
-                            .font(.system(size: 17, weight: .semibold))
-                    }
-                }
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 18)
-                .background(
-                    LinearGradient(
-                        colors: [JYColor.primaryRed, JYColor.deepRed],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .cornerRadius(16)
-                .shadow(color: JYColor.primaryRed.opacity(0.4), radius: 12, y: 6)
-            }
-            .disabled(viewModel.isGenerating || viewModel.prompt.isEmpty)
-            .opacity((viewModel.prompt.isEmpty) ? 0.6 : 1)
-            .padding(.horizontal, 24)
         }
+        .padding(.horizontal, 24)
     }
 
-    // MARK: - 快捷语料
-    private var quickPromptsSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("快捷描述")
+    private var styleSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("风格选择")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundColor(.white)
-                .padding(.horizontal, 24)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
-                    ForEach(AIService.promptTemplates, id: \.self) { prompt in
-                        QuickPromptTag(title: prompt) {
-                            viewModel.prompt = prompt
+                    ForEach(ImageStyle.allCases, id: \.self) { style in
+                        StyleTag(
+                            title: style.displayName,
+                            isSelected: viewModel.selectedStyle == style,
+                            action: {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                    viewModel.selectedStyle = style
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 24)
+    }
+
+    private var ratioSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("图片尺寸")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(.white)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(AspectRatio.allCases, id: \.self) { ratio in
+                        Button {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                viewModel.selectedRatio = ratio
+                            }
+                        } label: {
+                            VStack(spacing: 6) {
+                                AspectRatioPreview(ratio: ratio, isSelected: viewModel.selectedRatio == ratio)
+                                Text(ratio.displayName)
+                                    .font(.system(size: 11))
+                                    .foregroundColor(viewModel.selectedRatio == ratio ? .white : JYColor.moonWhite.opacity(0.6))
+                            }
+                            .frame(width: 56, height: 64)
+                            .background(RoundedRectangle(cornerRadius: 8).fill(viewModel.selectedRatio == ratio ? JYColor.primaryRed.opacity(0.3) : Color(hex: "2C2C2E")))
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(viewModel.selectedRatio == ratio ? JYColor.gold : Color.clear, lineWidth: 1))
                         }
                     }
                 }
-                .padding(.horizontal, 24)
+            }
+        }
+        .padding(.horizontal, 24)
+    }
+
+    private var generateButtonSection: some View {
+        Button {
+            Task { await viewModel.generate() }
+        } label: {
+            HStack {
+                if viewModel.isGenerating {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                } else {
+                    Image(systemName: "wand.and.stars")
+                        .font(.system(size: 18))
+                    Text("开始生成")
+                        .font(.system(size: 17, weight: .semibold))
+                }
+            }
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 18)
+            .background(LinearGradient(colors: [JYColor.primaryRed, JYColor.deepRed], startPoint: .leading, endPoint: .trailing))
+            .cornerRadius(16)
+            .shadow(color: JYColor.primaryRed.opacity(0.4), radius: 12, y: 6)
+        }
+        .disabled(viewModel.isGenerating || !viewModel.canGenerate)
+        .opacity(viewModel.canGenerate ? 1 : 0.6)
+        .padding(.horizontal, 24)
+    }
+
+    @ViewBuilder
+    private var quickPromptsSection: some View {
+        if viewModel.selectedMode == .textToImage {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("快捷描述")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 24)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(AIService.promptTemplates, id: \.self) { prompt in
+                            QuickPromptTag(title: prompt) {
+                                viewModel.prompt = prompt
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 24)
+                }
             }
         }
     }
@@ -444,9 +543,7 @@ struct CreateView: View {
 
 // MARK: - 创作模式
 enum CreateMode: CaseIterable {
-    case textToImage
-    case imageToImage
-    case elementCompose
+    case textToImage, imageToImage, elementCompose
 
     var title: String {
         switch self {
@@ -467,8 +564,7 @@ enum CreateMode: CaseIterable {
 
 // MARK: - 模型来源
 enum ImageModelSource: String, CaseIterable {
-    case miniMax = "minimax"
-    case local = "local"
+    case miniMax = "minimax", local = "local"
 
     var title: String {
         switch self {
@@ -492,6 +588,37 @@ enum ImageModelSource: String, CaseIterable {
     }
 }
 
+// MARK: - 组合元素
+enum CompositionElement: String, CaseIterable {
+    case fu = "福字", shou = "寿字", xi = "喜字", ruyi = "如意"
+    case lotus = "荷花", peony = "牡丹", plum = "梅花", bamboo = "竹子"
+    case pine = "松树", crane = "仙鹤", dragon = "龙", phoenix = "凤凰"
+    case butterfly = "蝴蝶", fish = "鲤鱼", rabbit = "兔子", peach = "桃子"
+
+    var icon: String {
+        switch self {
+        case .fu: return "福"
+        case .shou: return "寿"
+        case .xi: return "喜"
+        case .ruyi: return "🪭"
+        case .lotus: return "🪷"
+        case .peony: return "🌺"
+        case .plum: return "🌸"
+        case .bamboo: return "🎋"
+        case .pine: return "🌲"
+        case .crane: return "🦢"
+        case .dragon: return "🐉"
+        case .phoenix: return "🦅"
+        case .butterfly: return "🦋"
+        case .fish: return "🐟"
+        case .rabbit: return "🐰"
+        case .peach: return "🍑"
+        }
+    }
+
+    static var allElements: [String] { allCases.map { $0.rawValue } }
+}
+
 // MARK: - ViewModel
 class CreateViewModel: ObservableObject {
     @Published var selectedMode: CreateMode = .textToImage
@@ -507,6 +634,17 @@ class CreateViewModel: ObservableObject {
     @Published var optimizingPrompt: Bool = false
     @Published var showFilePicker: Bool = false
     @Published var isImporting: Bool = false
+    @Published var sourceImage: UIImage?
+    @Published var selectedElements: Set<String> = []
+    @Published var showImagePicker: Bool = false
+
+    var canGenerate: Bool {
+        switch selectedMode {
+        case .textToImage: return !prompt.isEmpty
+        case .imageToImage: return sourceImage != nil
+        case .elementCompose: return !selectedElements.isEmpty || !prompt.isEmpty
+        }
+    }
 
     init() {
         selectedStyle = SettingsManager.shared.getDefaultStyle()
@@ -526,8 +664,7 @@ class CreateViewModel: ObservableObject {
 
         do {
             let files = try FileManager.default.contentsOfDirectory(at: modelsPath, includingPropertiesForKeys: nil)
-            localModels = files
-                .filter { ["mlmodel", "safetensors", "ckpt"].contains($0.pathExtension.lowercased()) }
+            localModels = files.filter { ["mlmodel", "safetensors", "ckpt"].contains($0.pathExtension.lowercased()) }
                 .map { $0.deletingPathExtension().lastPathComponent }
 
             if selectedLocalModel.isEmpty && !localModels.isEmpty {
@@ -569,9 +706,7 @@ class CreateViewModel: ObservableObject {
             }
 
             refreshLocalModels()
-
-            let modelName = destinationURL.deletingPathExtension().lastPathComponent
-            selectedLocalModel = modelName
+            selectedLocalModel = destinationURL.deletingPathExtension().lastPathComponent
         } catch {
             errorMessage = "导入失败: \(error.localizedDescription)"
         }
@@ -580,30 +715,42 @@ class CreateViewModel: ObservableObject {
     }
 
     func generate() async {
-        guard !prompt.isEmpty else { return }
-
         await MainActor.run {
             isGenerating = true
             errorMessage = nil
             generatedImage = nil
         }
 
-        do {
-            let request = ImageGenerationRequest(
-                prompt: prompt,
-                style: selectedStyle,
-                aspectRatio: selectedRatio
-            )
+        var finalPrompt = prompt
 
+        switch selectedMode {
+        case .textToImage:
+            guard !prompt.isEmpty else {
+                await MainActor.run { isGenerating = false }
+                return
+            }
+        case .imageToImage:
+            guard sourceImage != nil else {
+                await MainActor.run { errorMessage = "请先选择一张图片"; isGenerating = false }
+                return
+            }
+        case .elementCompose:
+            guard !selectedElements.isEmpty || !prompt.isEmpty else {
+                await MainActor.run { errorMessage = "请选择元素或输入描述"; isGenerating = false }
+                return
+            }
+            if !selectedElements.isEmpty {
+                let elementsPrompt = selectedElements.joined(separator: "、")
+                finalPrompt = "剪纸艺术作品，组合元素：\(elementsPrompt)。\(prompt)"
+            }
+        }
+
+        do {
+            let request = ImageGenerationRequest(prompt: finalPrompt, style: selectedStyle, aspectRatio: selectedRatio)
             let result = try await AIService.shared.generateImage(request: request)
 
             let imageBase64 = result.image.jpegData(compressionQuality: 0.8)?.base64EncodedString()
-            let record = GenerationRecord(
-                prompt: prompt,
-                style: selectedStyle,
-                ratio: selectedRatio,
-                imageBase64: imageBase64
-            )
+            let record = GenerationRecord(prompt: finalPrompt, style: selectedStyle, ratio: selectedRatio, imageBase64: imageBase64)
             GenerationHistoryManager.shared.addRecord(record)
 
             await MainActor.run {
@@ -641,7 +788,7 @@ class CreateViewModel: ObservableObject {
     }
 }
 
-// MARK: - 模式按钮
+// MARK: - ModeButton
 struct ModeButton: View {
     let title: String
     let icon: String
@@ -653,27 +800,20 @@ struct ModeButton: View {
             VStack(spacing: 12) {
                 Image(systemName: icon)
                     .font(.system(size: 24))
-
                 Text(title)
                     .font(.system(size: 14, weight: .semibold))
             }
             .foregroundColor(isSelected ? .white : JYColor.moonWhite.opacity(0.6))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(isSelected ? JYColor.primaryRed : Color(hex: "2C2C2E"))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(isSelected ? JYColor.gold : Color.clear, lineWidth: 2)
-            )
+            .background(RoundedRectangle(cornerRadius: 16).fill(isSelected ? JYColor.primaryRed : Color(hex: "2C2C2E")))
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(isSelected ? JYColor.gold : Color.clear, lineWidth: 2))
             .shadow(color: isSelected ? JYColor.primaryRed.opacity(0.3) : .clear, radius: 8)
         }
     }
 }
 
-// MARK: - 风格标签
+// MARK: - StyleTag
 struct StyleTag: View {
     let title: String
     let isSelected: Bool
@@ -686,19 +826,13 @@ struct StyleTag: View {
                 .foregroundColor(isSelected ? .white : JYColor.moonWhite.opacity(0.7))
                 .padding(.horizontal, 20)
                 .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 20)
-                        .fill(isSelected ? JYColor.primaryRed : Color(hex: "2C2C2E"))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20)
-                        .stroke(isSelected ? JYColor.gold : JYColor.moonWhite.opacity(0.2), lineWidth: 1)
-                )
+                .background(RoundedRectangle(cornerRadius: 20).fill(isSelected ? JYColor.primaryRed : Color(hex: "2C2C2E")))
+                .overlay(RoundedRectangle(cornerRadius: 20).stroke(isSelected ? JYColor.gold : JYColor.moonWhite.opacity(0.2), lineWidth: 1))
         }
     }
 }
 
-// MARK: - 快捷描述标签
+// MARK: - QuickPromptTag
 struct QuickPromptTag: View {
     let title: String
     let action: () -> Void
@@ -714,18 +848,13 @@ struct QuickPromptTag: View {
             .foregroundColor(JYColor.moonWhite.opacity(0.8))
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
-            .background(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(Color(hex: "2C2C2E"))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 20)
-                    .stroke(JYColor.moonWhite.opacity(0.2), lineWidth: 1)
-            )
+            .background(RoundedRectangle(cornerRadius: 20).fill(Color(hex: "2C2C2E")))
+            .overlay(RoundedRectangle(cornerRadius: 20).stroke(JYColor.moonWhite.opacity(0.2), lineWidth: 1))
         }
     }
 }
 
+// MARK: - LocalModelTag
 struct LocalModelTag: View {
     let name: String
     let isSelected: Bool
@@ -743,18 +872,13 @@ struct LocalModelTag: View {
             .foregroundColor(isSelected ? .white : JYColor.moonWhite.opacity(0.8))
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
-            .background(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(isSelected ? JYColor.primaryRed : Color(hex: "2C2C2E"))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 20)
-                    .stroke(isSelected ? JYColor.gold : JYColor.moonWhite.opacity(0.2), lineWidth: 1)
-            )
+            .background(RoundedRectangle(cornerRadius: 20).fill(isSelected ? JYColor.primaryRed : Color(hex: "2C2C2E")))
+            .overlay(RoundedRectangle(cornerRadius: 20).stroke(isSelected ? JYColor.gold : JYColor.moonWhite.opacity(0.2), lineWidth: 1))
         }
     }
 }
 
+// MARK: - ModelSourceButton
 struct ModelSourceButton: View {
     let source: ImageModelSource
     let isSelected: Bool
@@ -792,18 +916,13 @@ struct ModelSourceButton: View {
                 }
             }
             .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(isSelected ? JYColor.primaryRed.opacity(0.15) : Color(hex: "2C2C2E"))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(isSelected ? JYColor.gold.opacity(0.5) : Color.clear, lineWidth: 1)
-            )
+            .background(RoundedRectangle(cornerRadius: 16).fill(isSelected ? JYColor.primaryRed.opacity(0.15) : Color(hex: "2C2C2E")))
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(isSelected ? JYColor.gold.opacity(0.5) : Color.clear, lineWidth: 1))
         }
     }
 }
 
+// MARK: - AspectRatioPreview
 struct AspectRatioPreview: View {
     let ratio: AspectRatio
     let isSelected: Bool
@@ -812,16 +931,11 @@ struct AspectRatioPreview: View {
         let maxWidth: CGFloat = 36
         let maxHeight: CGFloat = 28
         switch ratio {
-        case .ratio1x1:
-            return CGSize(width: maxWidth, height: maxWidth)
-        case .ratio16x9:
-            return CGSize(width: maxWidth, height: maxWidth * 9 / 16)
-        case .ratio9x16:
-            return CGSize(width: maxWidth * 9 / 16, height: maxHeight)
-        case .ratio4x3:
-            return CGSize(width: maxWidth, height: maxWidth * 3 / 4)
-        case .ratio3x4:
-            return CGSize(width: maxWidth * 3 / 4, height: maxHeight)
+        case .ratio1x1: return CGSize(width: maxWidth, height: maxWidth)
+        case .ratio16x9: return CGSize(width: maxWidth, height: maxWidth * 9 / 16)
+        case .ratio9x16: return CGSize(width: maxWidth * 9 / 16, height: maxHeight)
+        case .ratio4x3: return CGSize(width: maxWidth, height: maxWidth * 3 / 4)
+        case .ratio3x4: return CGSize(width: maxWidth * 3 / 4, height: maxHeight)
         }
     }
 
@@ -832,12 +946,31 @@ struct AspectRatioPreview: View {
     }
 }
 
-#Preview {
-    NavigationView {
-        CreateView()
+// MARK: - CompositionElementButton
+struct CompositionElementButton: View {
+    let element: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    private var elementEnum: CompositionElement? { CompositionElement(rawValue: element) }
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Text(elementEnum?.icon ?? "✨")
+                    .font(.system(size: 28))
+                Text(element)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(isSelected ? .white : JYColor.moonWhite.opacity(0.7))
+            }
+            .frame(width: 80, height: 80)
+            .background(RoundedRectangle(cornerRadius: 12).fill(isSelected ? JYColor.primaryRed.opacity(0.3) : Color(hex: "2C2C2E")))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(isSelected ? JYColor.gold : Color.clear, lineWidth: 2))
+        }
     }
 }
 
+// MARK: - TextEditorBackgroundModifier
 struct TextEditorBackgroundModifier: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 16.0, *) {
@@ -847,5 +980,11 @@ struct TextEditorBackgroundModifier: ViewModifier {
                 UITextView.appearance().backgroundColor = .clear
             }
         }
+    }
+}
+
+#Preview {
+    NavigationView {
+        CreateView()
     }
 }
